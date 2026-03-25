@@ -1,0 +1,49 @@
+{% set prioridad_color = {"ALTA": "danger", "MEDIA": "warning", "BAJA": "success"} %}
+{% set estado_completada = tarea.estado.value == "completada" %}
+
+<div class="list-group-item d-flex justify-content-between align-items-center py-2"
+     id="tarea-{{ tarea_id }}">
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-{{ prioridad_color[tarea.prioridad.name] }}">
+            {{ tarea.prioridad.name }}
+        </span>
+        <span class="{{ 'text-decoration-line-through text-muted' if estado_completada else '' }}">
+            {{ tarea.titulo }}
+        </span>
+        {% if tarea.descripcion %}
+        <small class="text-muted">— {{ tarea.descripcion }}</small>
+        {% endif %}
+    </div>
+
+    <div class="d-flex align-items-center gap-2">
+        {% if not estado_completada %}
+        <!-- Selector de prioridad -->
+        <form hx-ext="json-enc"
+              hx-patch="/tareas/{{ tarea_id }}/prioridad"
+              hx-target="#tarea-{{ tarea_id }}"
+              hx-swap="outerHTML"
+              hx-trigger="change from:select">
+            <select class="form-select form-select-sm"
+                    style="width: auto;"
+                    name="prioridad"
+                    hx-trigger="change">
+                <option value="ALTA" {{ 'selected' if tarea.prioridad.name == 'ALTA' }}>Alta</option>
+                <option value="MEDIA" {{ 'selected' if tarea.prioridad.name == 'MEDIA' }}>Media</option>
+                <option value="BAJA" {{ 'selected' if tarea.prioridad.name == 'BAJA' }}>Baja</option>
+            </select>
+        </form>
+
+        <!-- Botón completar -->
+        <button class="btn btn-success btn-sm"
+                hx-patch="/tareas/{{ tarea_id }}/completar"
+                hx-target="#tarea-{{ tarea_id }}"
+                hx-swap="outerHTML">
+            <i class="bi bi-check-lg"></i> Completar
+        </button>
+        {% else %}
+        <span class="badge bg-secondary">
+            <i class="bi bi-check2-circle me-1"></i>Completada
+        </span>
+        {% endif %}
+    </div>
+</div>

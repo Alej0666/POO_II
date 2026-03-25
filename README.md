@@ -84,6 +84,37 @@ behave features/
 
 ---
 
+## E3 — Prototipo Web (FastAPI + HTMX)
+
+### Instalar dependencias web
+
+```bash
+pip install -r requirements.txt
+```
+
+### Ejecutar el servidor
+
+```bash
+uvicorn api.main:app --reload
+```
+
+El servidor arranca en `http://127.0.0.1:8000`.
+
+| URL | Descripción |
+|-----|-------------|
+| `http://127.0.0.1:8000/` | Interfaz web principal |
+| `http://127.0.0.1:8000/docs` | Swagger UI interactivo |
+
+### Flujo de uso rápido
+
+1. Crear un usuario en la columna derecha (username, email).
+2. Anotar el **ID** que devuelve el endpoint (ver `/docs` → `GET /usuarios`).
+3. Crear un proyecto indicando el ID del líder.
+4. Agregar tareas desde el card del proyecto.
+5. Marcar tareas como completadas o cambiar prioridad directamente desde la lista.
+
+---
+
 ## Ejemplo de Uso
 
 ```python

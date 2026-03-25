@@ -1,0 +1,7 @@
+{% for item in tareas %}
+{% set tarea = item.tarea %}
+{% set tarea_id = item.tarea_id %}
+{% include "tareas/item.html" %}
+{% else %}
+<div class="list-group-item text-muted small">Sin tareas todavía.</div>
+{% endfor %}

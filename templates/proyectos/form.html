@@ -1,0 +1,32 @@
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white">
+        <i class="bi bi-folder-plus me-2"></i>Nuevo Proyecto
+    </div>
+    <div class="card-body">
+        <form hx-ext="json-enc"
+              hx-post="/proyectos"
+              hx-target="#lista-proyectos"
+              hx-swap="innerHTML"
+              hx-on::after-request="this.reset()">
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <input class="form-control" type="text"
+                           name="nombre" placeholder="Nombre (mín. 3 car.)" required minlength="3" maxlength="50">
+                </div>
+                <div class="col-md-4">
+                    <input class="form-control" type="text"
+                           name="descripcion" placeholder="Descripción (opcional)">
+                </div>
+                <div class="col-md-2">
+                    <input class="form-control" type="number"
+                           name="lider_id" placeholder="ID Líder" required min="1">
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" type="submit">
+                        <i class="bi bi-plus-lg me-1"></i>Crear
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
