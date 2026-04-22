@@ -6,3 +6,5 @@ uvicorn[standard]
 jinja2
 python-multipart
 email-validator
+SQLAlqchemy
+psycopg2-binary
