@@ -115,6 +115,49 @@ El servidor arranca en `http://127.0.0.1:8000`.
 
 ---
 
+## E4 — Persistencia (SQLAlchemy + Alembic)
+
+### Instalar dependencias
+
+```bash
+pip install -r requirements.txt
+```
+
+### Aplicar migraciones
+
+```bash
+python apply_migrations.py
+```
+
+O con Alembic directamente:
+
+```bash
+alembic upgrade head
+```
+
+Esto crea la base de datos `taskflow.db` con las tablas `usuarios`, `proyectos` y `tareas`.
+
+### Verificar migraciones aplicadas
+
+```bash
+alembic current   # Muestra la migración actual
+alembic history --verbose   # Historial completo
+```
+
+### Estructura de base de datos
+
+```
+usuarios (id, username*, email*, activo)
+  ↓ 1-to-Many
+proyectos (id, nombre, descripcion, usuario_id)
+  ↓ 1-to-Many
+tareas (id, titulo, descripcion, prioridad, estado, proyecto_id)
+```
+
+*unique: username, email
+
+---
+
 ## Ejemplo de Uso
 
 ```python
