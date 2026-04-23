@@ -1,68 +1,91 @@
 # -*- coding: utf-8 -*-
-"""Rutas de la API para proyectos."""
+"""Rutas de la API para Proyectos — Con AsyncSession (E4 integrado)."""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models import ProyectoCreate, ProyectoResponse, TareaCreate
-from api.storage import next_proyecto_id, next_tarea_id, proyectos_db, tareas_db, usuarios_db
-from src.domain.proyecto import Proyecto
-from src.domain.tarea import Tarea
+from app.database import get_db
+from app.models import Usuario, Proyecto, Tarea
 
 router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
 templates = Jinja2Templates(directory="templates")
 
 
 @router.get("", response_class=HTMLResponse, summary="Listar proyectos (fragmento HTMX)")
-def listar_proyectos(request: Request):
+async def listar_proyectos(request: Request, session: AsyncSession = Depends(get_db)):
     """Devuelve el fragmento HTML de la lista de proyectos para HTMX."""
+    stmt = select(Proyecto).order_by(Proyecto.id)
+    result = await session.execute(stmt)
+    proyectos_list = result.scalars().all()
+    
     proyectos = [
-        {"id": pid, "proyecto": p, "total_tareas": len(p.tareas)}
-        for pid, p in proyectos_db.items()
+        {"id": p.id, "proyecto": p, "total_tareas": len(p.tareas)}
+        for p in proyectos_list
     ]
     return templates.TemplateResponse(
-        "proyectos/lista.html",
-        {"request": request, "proyectos": proyectos},
+        request=request,
+        name="proyectos/lista.html",
+        context={"proyectos": proyectos},
     )
 
 
 @router.post("", response_class=HTMLResponse, status_code=201, summary="Crear proyecto")
-def crear_proyecto(request: Request, data: ProyectoCreate):
-    """Crea un nuevo proyecto y devuelve la lista de proyectos actualizada."""
-    lider = usuarios_db.get(data.lider_id)
+async def crear_proyecto(
+    request: Request,
+    data: ProyectoCreate,
+    session: AsyncSession = Depends(get_db),
+):
+    """Crea un nuevo proyecto en BD y devuelve lista actualizada."""
+    # Verificar que el líder existe
+    lider = await session.get(Usuario, data.lider_id)
     if not lider:
         raise HTTPException(status_code=404, detail="Usuario líder no encontrado")
-    try:
-        proyecto = Proyecto(nombre=data.nombre, lider=lider, descripcion=data.descripcion)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    pid = next_proyecto_id()
-    proyectos_db[pid] = proyecto
-
+    
+    # Crear proyecto
+    proyecto = Proyecto(nombre=data.nombre, descripcion=data.descripcion, usuario_id=data.lider_id)
+    session.add(proyecto)
+    await session.commit()
+    await session.refresh(proyecto)
+    
+    # Retornar lista actualizada
+    stmt = select(Proyecto).order_by(Proyecto.id)
+    result = await session.execute(stmt)
+    proyectos_list = result.scalars().all()
+    
     proyectos = [
-        {"id": i, "proyecto": p, "total_tareas": len(p.tareas)}
-        for i, p in proyectos_db.items()
+        {"id": p.id, "proyecto": p, "total_tareas": len(p.tareas)}
+        for p in proyectos_list
     ]
     return templates.TemplateResponse(
-        "proyectos/lista.html",
-        {"request": request, "proyectos": proyectos},
+        request=request,
+        name="proyectos/lista.html",
+        context={"proyectos": proyectos},
         status_code=201,
     )
 
 
-@router.get("/{proyecto_id}", response_model=ProyectoResponse, summary="Obtener proyecto por ID")
-def obtener_proyecto(proyecto_id: int):
-    """Retorna los datos de un proyecto. Retorna 404 si no existe."""
-    proyecto = proyectos_db.get(proyecto_id)
+@router.get("/{proyecto_id}", response_model=ProyectoResponse, summary="Obtener proyecto")
+async def obtener_proyecto(
+    proyecto_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Retorna datos de un proyecto."""
+    proyecto = await session.get(Proyecto, proyecto_id)
     if not proyecto:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+    
+    # Cargar relación usuario
+    await session.refresh(proyecto, ["usuario"])
+    
     return ProyectoResponse(
-        id=proyecto_id,
+        id=proyecto.id,
         nombre=proyecto.nombre,
         descripcion=proyecto.descripcion,
-        lider_username=proyecto.lider.username,
+        lider_username=proyecto.usuario.username,
         total_tareas=len(proyecto.tareas),
     )
 
@@ -73,23 +96,32 @@ def obtener_proyecto(proyecto_id: int):
     status_code=201,
     summary="Agregar tarea a proyecto",
 )
-def agregar_tarea(proyecto_id: int, request: Request, data: TareaCreate):
-    """Agrega una tarea al proyecto y retorna el fragmento HTML del item de tarea."""
-    proyecto = proyectos_db.get(proyecto_id)
+async def agregar_tarea(
+    proyecto_id: int,
+    request: Request,
+    data: TareaCreate,
+    session: AsyncSession = Depends(get_db),
+):
+    """Agrega una tarea al proyecto y retorna el fragmento HTML."""
+    proyecto = await session.get(Proyecto, proyecto_id)
     if not proyecto:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    try:
-        tarea = Tarea(titulo=data.titulo, prioridad=data.prioridad, descripcion=data.descripcion)
-        proyecto.agregar_tarea(tarea)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    tid = next_tarea_id()
-    tareas_db[tid] = tarea
-
+    
+    # Crear tarea
+    tarea = Tarea(
+        titulo=data.titulo,
+        descripcion=data.descripcion,
+        prioridad=data.prioridad,
+        proyecto_id=proyecto_id,
+    )
+    session.add(tarea)
+    await session.commit()
+    await session.refresh(tarea)
+    
     return templates.TemplateResponse(
-        "tareas/item.html",
-        {"request": request, "tarea": tarea, "tarea_id": tid},
+        request=request,
+        name="tareas/item.html",
+        context={"tarea": tarea, "tarea_id": tarea.id},
         status_code=201,
     )
 
@@ -99,19 +131,25 @@ def agregar_tarea(proyecto_id: int, request: Request, data: TareaCreate):
     response_class=HTMLResponse,
     summary="Listar tareas de un proyecto (fragmento HTMX)",
 )
-def listar_tareas_proyecto(proyecto_id: int, request: Request):
+async def listar_tareas_proyecto(
+    proyecto_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+):
     """Devuelve el fragmento HTML de las tareas de un proyecto."""
-    proyecto = proyectos_db.get(proyecto_id)
+    proyecto = await session.get(Proyecto, proyecto_id)
     if not proyecto:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-
-    # Mapear cada tarea del proyecto a su ID en tareas_db
-    tareas_con_id = []
-    for tid, t in tareas_db.items():
-        if t in proyecto.tareas:
-            tareas_con_id.append({"tarea_id": tid, "tarea": t})
-
+    
+    # Las tareas están en proyecto.tareas (relación)
+    stmt = select(Tarea).where(Tarea.proyecto_id == proyecto_id).order_by(Tarea.id)
+    result = await session.execute(stmt)
+    tareas_list = result.scalars().all()
+    
+    tareas_con_id = [{"tarea_id": t.id, "tarea": t} for t in tareas_list]
+    
     return templates.TemplateResponse(
-        "tareas/lista.html",
-        {"request": request, "tareas": tareas_con_id, "proyecto_id": proyecto_id},
+        request=request,
+        name="tareas/lista.html",
+        context={"tareas": tareas_con_id, "proyecto_id": proyecto_id},
     )

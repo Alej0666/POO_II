@@ -1,34 +1,50 @@
 # -*- coding: utf-8 -*-
-"""Configuración de base de datos con SQLAlchemy 2.0."""
+"""Configuración de base de datos con SQLAlchemy 2.0 Async."""
 
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+import re
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 
-# URL de la base de datos
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./taskflow.db")
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-# Motor de SQLAlchemy
-engine = create_engine(
+# URL de la base de datos desde .env o fallback
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./taskflow.db")
+
+# Convertir postgresql: a postgresql+psycopg: para async support
+if "postgresql:" in DATABASE_URL:
+    DATABASE_URL = re.sub(r"^postgresql:", "postgresql+psycopg:", DATABASE_URL)
+
+# Motor async de SQLAlchemy
+engine = create_async_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
     echo=False,
+    pool_pre_ping=True,
 )
 
-# Session local
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Session factory async
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
 
 
-# Clase base para todos los modelos
 class Base(DeclarativeBase):
-    """Clase base para los modelos SQLAlchemy 2.0."""
+    """Clase base para modelos SQLAlchemy 2.0."""
     pass
 
 
-def get_db():
-    """Dependency para obtener una sesión de BD en FastAPI."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    """Async dependency: inyecta AsyncSession en rutas."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
