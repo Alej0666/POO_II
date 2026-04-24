@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """Rutas de la API para Proyectos — Con AsyncSession (E4 integrado)."""
 
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models import ProyectoCreate, ProyectoResponse, TareaCreate
@@ -12,15 +14,21 @@ from app.database import get_db
 from app.models import Usuario, Proyecto, Tarea
 
 router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
-templates = Jinja2Templates(directory="templates")
+
+# Configurar templates con ruta absoluta
+BASE_DIR = Path(__file__).parent.parent.parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 @router.get("", response_class=HTMLResponse, summary="Listar proyectos (fragmento HTMX)")
 async def listar_proyectos(request: Request, session: AsyncSession = Depends(get_db)):
     """Devuelve el fragmento HTML de la lista de proyectos para HTMX."""
-    stmt = select(Proyecto).order_by(Proyecto.id)
+    stmt = select(Proyecto).options(
+        joinedload(Proyecto.usuario),
+        joinedload(Proyecto.tareas)
+    ).order_by(Proyecto.id)
     result = await session.execute(stmt)
-    proyectos_list = result.scalars().all()
+    proyectos_list = result.unique().scalars().all()
     
     proyectos = [
         {"id": p.id, "proyecto": p, "total_tareas": len(p.tareas)}
@@ -52,9 +60,12 @@ async def crear_proyecto(
     await session.refresh(proyecto)
     
     # Retornar lista actualizada
-    stmt = select(Proyecto).order_by(Proyecto.id)
+    stmt = select(Proyecto).options(
+        joinedload(Proyecto.usuario),
+        joinedload(Proyecto.tareas)
+    ).order_by(Proyecto.id)
     result = await session.execute(stmt)
-    proyectos_list = result.scalars().all()
+    proyectos_list = result.unique().scalars().all()
     
     proyectos = [
         {"id": p.id, "proyecto": p, "total_tareas": len(p.tareas)}

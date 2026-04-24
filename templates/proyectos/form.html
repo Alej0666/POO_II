@@ -22,11 +22,11 @@
                            name="descripcion" placeholder="Descripción (opcional)">
                 </div>
                 <div class="col-md-3">
-                    <select class="form-select" name="lider_id" id="select-lider" required
-                            hx-get="/usuarios/opciones"
-                            hx-trigger="load"
-                            hx-swap="innerHTML">
-                        <option value="" disabled selected>— Cargando usuarios —</option>
+                    <select class="form-select" name="lider_id" id="select-lider" required>
+                        <option value="" disabled selected>— Seleccionar líder —</option>
+                        {% for item in usuarios %}
+                        <option value="{{ item.usuario.id }}">{{ item.usuario.username }} ({{ item.usuario.email }})</option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div class="col-md-2">

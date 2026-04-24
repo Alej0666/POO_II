@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Rutas de la API para Tareas — Con AsyncSession (E4 integrado)."""
 
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -12,7 +13,10 @@ from app.models import Tarea
 from src.domain.enums import EstadoTarea
 
 router = APIRouter(prefix="/tareas", tags=["Tareas"])
-templates = Jinja2Templates(directory="templates")
+
+# Configurar templates con ruta absoluta
+BASE_DIR = Path(__file__).parent.parent.parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 @router.patch(
