@@ -3,7 +3,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from src.domain.enums import PrioridadTarea
 
@@ -49,9 +49,27 @@ class TareaCreate(BaseModel):
     titulo: str = Field(..., min_length=3, max_length=100, description="Título de la tarea")
     prioridad: PrioridadTarea = Field(default=PrioridadTarea.MEDIA, description="Prioridad inicial")
     descripcion: Optional[str] = Field(None, description="Descripción detallada")
+    
+    @field_validator('prioridad', mode='before')
+    def validate_prioridad(cls, v):
+        if isinstance(v, str):
+            try:
+                return PrioridadTarea[v]
+            except KeyError:
+                raise ValueError(f"Prioridad inválida: {v}. Use ALTA, MEDIA o BAJA")
+        return v
 
 
 class TareaUpdate(BaseModel):
     """Datos para actualizar la prioridad de una tarea."""
 
     prioridad: PrioridadTarea = Field(..., description="Nueva prioridad")
+    
+    @field_validator('prioridad', mode='before')
+    def validate_prioridad(cls, v):
+        if isinstance(v, str):
+            try:
+                return PrioridadTarea[v]
+            except KeyError:
+                raise ValueError(f"Prioridad inválida: {v}. Use ALTA, MEDIA o BAJA")
+        return v
