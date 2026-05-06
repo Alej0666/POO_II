@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Rutas de la API para Usuarios — Con AsyncSession (E4 integrado)."""
+"""Rutas de la API para Usuarios — Con AsyncSession + JWT (E5)."""
 
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models import UsuarioCreate, UsuarioResponse
 from app.database import get_db
 from app.models import Usuario
+from api.schemas.usuario import UsuarioOut, UsuarioUpdate
+from api.services.usuario_service import UsuarioService
+from api.auth import get_current_user
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
@@ -49,17 +51,13 @@ async def _get_opciones_usuarios(session: AsyncSession) -> str:
     return options
 
 
-@router.get("", response_model=list[UsuarioResponse], summary="Listar usuarios")
+@router.get("", response_model=list[UsuarioOut], summary="Listar usuarios")
 async def listar_usuarios(session: AsyncSession = Depends(get_db)):
     """Retorna lista de usuarios desde BD."""
     stmt = select(Usuario).order_by(Usuario.id)
     result = await session.execute(stmt)
     usuarios = result.scalars().all()
-    
-    return [
-        UsuarioResponse(id=u.id, username=u.username, email=u.email, activo=u.activo)
-        for u in usuarios
-    ]
+    return usuarios
 
 
 @router.get("/opciones", response_class=HTMLResponse, include_in_schema=False)
@@ -68,45 +66,7 @@ async def opciones_usuarios(session: AsyncSession = Depends(get_db)):
     return HTMLResponse(await _get_opciones_usuarios(session))
 
 
-@router.post("", status_code=201, summary="Crear usuario")
-async def crear_usuario(
-    request: Request,
-    data: UsuarioCreate,
-    session: AsyncSession = Depends(get_db),
-):
-    """Crea usuario en BD.
-    - HTMX: devuelve HTML con lista actualizada + OOB swap
-    - API: devuelve JSON
-    """
-    # Verificar que username y email no existan
-    stmt = select(Usuario).where(Usuario.username == data.username)
-    existing = await session.execute(stmt)
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=422, detail="Username ya existe")
-    
-    stmt = select(Usuario).where(Usuario.email == data.email)
-    existing = await session.execute(stmt)
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=422, detail="Email ya existe")
-    
-    # Crear usuario
-    usuario = Usuario(username=data.username, email=data.email, activo=True)
-    session.add(usuario)
-    await session.flush()  # Para obtener el ID sin commit completo
-    uid = usuario.id
-    await session.commit()
-    await session.refresh(usuario)  # Refresca el objeto
-    
-    if request.headers.get("HX-Request"):
-        lista_html = await _get_usuarios_html(session)
-        opciones_html = await _get_opciones_usuarios(session)
-        oob = f'<select id="select-lider" hx-swap-oob="innerHTML">{opciones_html}</select>'
-        return HTMLResponse(content=lista_html + oob, status_code=201)
-    
-    return UsuarioResponse(id=uid, username=usuario.username, email=usuario.email, activo=usuario.activo)
-
-
-@router.get("/{usuario_id}", response_model=UsuarioResponse, summary="Obtener usuario")
+@router.get("/{usuario_id}", response_model=UsuarioOut, summary="Obtener usuario por ID")
 async def obtener_usuario(
     usuario_id: int,
     session: AsyncSession = Depends(get_db),
@@ -114,11 +74,60 @@ async def obtener_usuario(
     """Obtiene un usuario por ID."""
     usuario = await session.get(Usuario, usuario_id)
     if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    return usuario
+
+
+@router.put("/{usuario_id}", response_model=UsuarioOut, summary="Actualizar usuario")
+async def actualizar_usuario(
+    usuario_id: int,
+    data: UsuarioUpdate,
+    session: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """Actualiza datos de un usuario (solo el propietario)."""
+    # Validar propiedad
+    if current_user.id != usuario_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para actualizar este usuario",
+        )
     
-    return UsuarioResponse(
-        id=usuario.id,
-        username=usuario.username,
-        email=usuario.email,
-        activo=usuario.activo,
-    )
+    usuario = await session.get(Usuario, usuario_id)
+    if not usuario:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    
+    # Actualizar campos proporcionados
+    if data.email is not None:
+        usuario.email = data.email
+    if data.nombre_completo is not None:
+        usuario.nombre_completo = data.nombre_completo
+    if data.activo is not None:
+        usuario.activo = data.activo
+    
+    await session.commit()
+    await session.refresh(usuario)
+    return usuario
+
+
+@router.delete("/{usuario_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar usuario")
+async def eliminar_usuario(
+    usuario_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """Elimina un usuario (solo el propietario)."""
+    # Validar propiedad
+    if current_user.id != usuario_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para eliminar este usuario",
+        )
+    
+    usuario = await session.get(Usuario, usuario_id)
+    if not usuario:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    
+    await session.delete(usuario)
+    await session.commit()
+

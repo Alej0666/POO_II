@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.routes import proyectos, tareas, usuarios
+from api.routes import auth, proyectos, tareas, usuarios
 from app.database import get_db
 from app.models import Proyecto, Usuario
 
@@ -26,6 +26,7 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+app.include_router(auth.router)
 app.include_router(usuarios.router)
 app.include_router(proyectos.router)
 app.include_router(tareas.router)

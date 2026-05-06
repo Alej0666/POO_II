@@ -201,3 +201,204 @@ altas = proyecto.obtener_tareas_por_prioridad(PrioridadTarea.ALTA)
 | `Proyecto` | Agrupa tareas bajo un líder; relación de composición con `Tarea`. |
 | `PrioridadTarea` | Enum: `ALTA=1`, `MEDIA=2`, `BAJA=3`. |
 | `EstadoTarea` | Enum: `PENDIENTE`, `EN_PROGRESO`, `COMPLETADA`. |
+
+---
+
+## E5 — CRUD REST + JWT + Arquitectura en Capas
+
+**Evaluación final**: Implementación completa de API REST con autenticación JWT y arquitectura limpia en capas.
+
+### Características principales
+
+- ✅ **CRUD SQLAlchemy**: Operaciones de usuario, proyecto y tarea (25%)
+- ✅ **Autenticación JWT**: Token Bearer con python-jose y Argon2 (25%)
+- ✅ **Arquitectura en Capas**: Routers → Services → Repositories → Models (20%)
+- ✅ **Validación y Errores**: HTTP 400/401/403/404 con mensajes detallados (15%)
+- ✅ **Inyección de Dependencias**: Depends() de FastAPI en protección de rutas (10%)
+- ✅ **Patrones OOP**: Generic BaseRepository[T], Service locators, Enums (5%)
+
+### Setup de Evaluación 5
+
+```bash
+# 1. Instalar dependencias
+pip install -r requirements.txt
+
+# 2. Aplicar migraciones
+python -m alembic upgrade head
+
+# 3. Iniciar servidor
+python -m uvicorn api.main:app --reload --port 8000
+```
+
+Servidor disponible en `http://127.0.0.1:8000`
+
+**Swagger UI**: `http://127.0.0.1:8000/docs`
+
+### Estructura de la API (E5)
+
+#### Capas implementadas
+
+```
+api/
+├── routes/           # Routers: HTTP endpoints
+│   ├── auth.py       # POST /auth/register, /auth/login
+│   ├── usuarios.py   # CRUD de usuarios
+│   ├── proyectos.py  # CRUD de proyectos (with JWT)
+│   └── tareas.py     # CRUD de tareas (nested)
+├── services/         # Business logic
+│   ├── usuario_service.py
+│   ├── proyecto_service.py
+│   └── tarea_service.py
+├── repositories/     # Data access (with GenericBaseRepository[T])
+│   ├── base.py
+│   ├── usuario_repo.py
+│   ├── proyecto_repo.py
+│   └── tarea_repo.py
+├── schemas/          # Pydantic v2 DTO validation
+│   ├── usuario.py
+│   ├── proyecto.py
+│   └── tarea.py
+├── auth.py           # JWT: create_access_token, get_current_user
+└── main.py           # FastAPI app setup
+```
+
+### Ejemplos de uso (curl)
+
+#### 1. Registrar usuario
+
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"ana","email":"ana@example.com","password":"secret123"}'
+
+# Respuesta (201):
+# {
+#   "id": 1,
+#   "username": "ana",
+#   "email": "ana@example.com",
+#   "nombre_completo": null,
+#   "activo": true
+# }
+```
+
+#### 2. Login y obtener JWT
+
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=ana&password=secret123"
+
+# Respuesta (200):
+# {
+#   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "token_type": "bearer"
+# }
+```
+
+#### 3. Crear proyecto (autenticado)
+
+```bash
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+curl -X POST http://localhost:8000/proyectos \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"nombre":"Mi Proyecto","descripcion":"Descripción"}'
+
+# Respuesta (201):
+# {
+#   "id": 1,
+#   "nombre": "Mi Proyecto",
+#   "descripcion": "Descripción",
+#   "usuario_id": 1
+# }
+```
+
+#### 4. Listar proyectos (autenticado)
+
+```bash
+curl -X GET http://localhost:8000/proyectos \
+  -H "Authorization: Bearer $TOKEN"
+
+# Respuesta (200): [{"id":1,"nombre":"...","usuario_id":1}]
+```
+
+#### 5. Crear tarea en proyecto
+
+```bash
+curl -X POST http://localhost:8000/proyectos/1/tareas \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"titulo":"Tarea 1","prioridad":"ALTA","estado":"pendiente"}'
+
+# Respuesta (201):
+# {
+#   "id": 1,
+#   "titulo": "Tarea 1",
+#   "prioridad": "ALTA",
+#   "estado": "pendiente",
+#   "proyecto_id": 1
+# }
+```
+
+### Códigos HTTP devueltos
+
+| Código | Situación | Ejemplo |
+|--------|-----------|---------|
+| `200 OK` | Login exitoso, GET exitoso | Token JWT devuelto |
+| `201 Created` | Recurso creado | Usuario/Proyecto/Tarea |
+| `400 Bad Request` | Validación falla | Email duplicado, campo vacío |
+| `401 Unauthorized` | Falta token JWT | Authorization header missing |
+| `403 Forbidden` | No es propietario | Acceso a proyecto de otro usuario |
+| `404 Not Found` | Recurso no existe | Proyecto ID 999 |
+
+### Seguridad y Validaciones
+
+**Autenticación**: OAuth2PasswordBearer + JWT (HS256, 30 min expiry)
+
+**Hashing**: Argon2id (10+ char passwords)
+
+**Validaciones en models**:
+- Username: 3+ caracteres, único
+- Email: Formato válido, único
+- Proyecto nombre: 3+ caracteres
+- Tarea título: 3+ caracteres
+- Prioridad: Enum (ALTA, MEDIA, BAJA)
+- Estado: Enum (pendiente, en_progreso, completada)
+
+**Protección de rutas**: `Depends(get_current_user)` valida JWT y retorna Usuario
+
+### Migraciones (Alembic)
+
+```bash
+# Ver migración actual
+alembic current
+
+# Aplicar todas las migraciones
+alembic upgrade head
+
+# Ver historial
+alembic history --verbose
+
+# Crear nueva migración
+alembic revision --autogenerate -m "descripción"
+```
+
+**Migraciones incluidas**:
+- `001_initial.py`: Tablas usuarios, proyectos, tareas
+- `002_add_hashed_password.py`: Columna hashed_password
+- `003_add_nombre_completo.py`: Columna nombre_completo
+
+### Base de datos
+
+Usa **SQLite** (`taskflow.db`) en desarrollo, configurable a **PostgreSQL** vía `.env`:
+
+```bash
+DATABASE_URL=postgresql+psycopg://user:pass@localhost/taskflow
+```
+
+---
+
+## Autor
+
+Desarrollado para **UNAULA — POO II (IF0100)**

@@ -11,3 +11,5 @@ alembic
 psycopg[binary]
 python-dotenv
 aiosqlite
+passlib[argon2]
+python-jose[cryptography]
