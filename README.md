@@ -389,12 +389,59 @@ alembic revision --autogenerate -m "descripción"
 - `002_add_hashed_password.py`: Columna hashed_password
 - `003_add_nombre_completo.py`: Columna nombre_completo
 
-### Base de datos
+### Configuración de Base de Datos
 
-Usa **SQLite** (`taskflow.db`) en desarrollo, configurable a **PostgreSQL** vía `.env`:
+#### SQLite (desarrollo local — por defecto)
 
 ```bash
-DATABASE_URL=postgresql+psycopg://user:pass@localhost/taskflow
+# Usar .env o sin configuración (.gitignore lo protege)
+# DATABASE_URL=sqlite+aiosqlite:///./taskflow.db
+
+# Probar conexión
+python test_db_connection.py
+```
+
+#### PostgreSQL (producción)
+
+**Opción 1: Variable de entorno en `.env`**
+
+```bash
+# .env
+DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5432/taskflow
+```
+
+**Opción 2: Crear BD en PostgreSQL**
+
+```bash
+# Terminal PostgreSQL
+createdb taskflow
+
+# Aplicar migraciones (automáticamente crea tablas)
+python -m alembic upgrade head
+```
+
+**Opción 3: Migrar datos de SQLite a PostgreSQL**
+
+```bash
+# Primero crear la BD destino en PostgreSQL
+createdb taskflow
+
+# Luego aplicar migraciones
+python -m alembic upgrade head
+
+# Finalmente migrar datos
+python migrate_to_postgres.py \
+  --host localhost \
+  --user postgres \
+  --password tu_password \
+  --database taskflow
+```
+
+**Probar conexión a PostgreSQL**
+
+```bash
+# Editar DATABASE_URL en .env o env vars
+python test_db_connection.py
 ```
 
 ---
