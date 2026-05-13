@@ -17,3 +17,23 @@ htmlcov/
 
 # behave
 .behave/
+
+# Database files
+*.db
+taskflow.db
+taskflow_test.db
+alembic_version
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
